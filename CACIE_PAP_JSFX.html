@@ -1,0 +1,1605 @@
+<!DOCTYPE html "-//W3C//DTD XHTML 1.0 Strict//EN" 
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="content-type" content="text/html; charset=utf-8"/>
+    <title>JSFXで</title>
+    <script type="text/javascript"
+      src="http://maps.google.com/maps/api/js?sensor=false"></script>
+
+    <script type="text/javascript" src="jquery/jquery.min.js"></script>
+    <script type="text/javascript" src="jquery/jquery-ui.min.js"></script>
+    
+    <script type="text/javascript" src="jsfx/lib/audio.js"></script>
+    <script type="text/javascript" src="jsfx/lib/jsfx.js"></script>
+    <script type="text/javascript" src="jsfx/lib/jsfxlib.js"></script>
+
+    <script type="text/javascript" src="processing.js"></script>
+
+    <script type="text/javascript">
+var timeOutTimerID = 0;
+var stepSequences = new Array();
+var degreeSequences = new Array();
+var audioObjs = new Array(4);
+var playingBarCounter = 0;
+var harmonyArray = new Array(4);
+var freqArray = new Array();
+
+var paramDataHarmony;
+var soundDataHarmony;
+var paramDataDrum;
+var soundDataDrum;
+var paramDataBass;
+var soundDataBass;
+var paramDataMelodies;
+var soundDataMelodies;
+var paramDataArpeggio;
+var soundDataArpeggio;
+
+var tempo = 0.75;
+
+var sampleRate = 44100;
+var numOfSamplePar16th = parseInt(sampleRate / 16 * 4 * tempo);
+var audioArray = new Array(numOfSamplePar16th * 16 * tempo * 2);
+
+// Assign Field 4 * 6 + Parent Field 2 + Offspring Field 4 = 30
+//Assingn Field 4 * 8 + Collections Field 16 = 48
+var chromosomeStorage = new Array(48);
+var evaluatedValueStorage = new Array(48);
+var degreeSequenceStorage = new Array(48);
+var durationSequenceStorage = new Array(48);
+var stepSequenceStorage = new Array(48);
+
+var functionArray;
+var staticArray;
+var variableArray;
+
+var offspringInformation = new Array(16 * 4); 
+
+$(function(){
+    //音設定
+    functionArray = initFunctionArray();
+    staticArray = initStaticArray();
+    variableArray = initVariableArray();
+    
+    makeFreqArray();
+    makeDrumSoundData();
+    makeHarmonySoundData();
+    makeBassSoundData();
+    makeArpeggioSoundData();
+    makeMelodySoundData();
+    
+    //degreeSequences配列の生成．中身はダミー．
+    for(var i=0; i<4; i++){
+	var oneBarDegreeSequences = new Array();
+	for(var j=0; j<8; j++){
+	    oneBarDegreeSequences.push(new Array());
+	}
+	degreeSequences.push(new Array(0, 0, 0, 0));
+    }
+    
+    //stepSequences配列の生成．中身はダミー．
+    for(var i=0; i<4; i++){
+	var oneBarStepSequences = new Array();
+	for(var j=0; j<8; j++){
+	    oneBarStepSequences.push(new Array());
+	}
+	stepSequences.push(oneBarStepSequences);
+    }
+    //生成したdegreeSequences配列と，stepSequences配列にemptyChromosomeを突っ込む
+    initSound();
+    
+    for(var i=0; i<4; i++){
+	makeAudioFromStepSequence(degreeSequences[i], stepSequences[i], i);
+    }
+    
+    sampleRate = 44100;
+    numOfSamplePar16th = parseInt(sampleRate / 16 * 4 * tempo);
+    audioArray = new Array(numOfSamplePar16th * 16 * tempo * 2);
+
+    audioObjs[0].load();
+    audioObjs[1].load();
+    audioObjs[2].load();
+    audioObjs[3].load();
+    timeOutTimerID = 0;    
+
+    //Offspringの生成
+    initOffspring();
+});
+
+
+function initFunctionArray(){
+    var newFunctionArray = new Array();
+
+    var func_add = new Object();
+    func_add.evaluate = function(a, b){return a+b;}
+    func_add.label = "func_add";
+    func_add.isNumber = false;
+    func_add.isFunction = true;
+    func_add.stackCount = -1;
+    newFunctionArray.push(func_add);
+    
+    var func_sub = new Object();
+    func_sub.evaluate = function(a, b){return a-b;}
+    func_sub.label = "func_sub";
+    func_sub.isNumber = false;
+    func_sub.isFunction = true;
+    func_sub.stackCount = -1;
+    newFunctionArray.push(func_sub);
+
+    var func_mul = new Object();
+    func_mul.evaluate = function(a, b){return a*b;}
+    func_mul.label = "func_mul";
+    func_mul.isNumber = false;
+    func_mul.isFunction = true;
+    func_mul.stackCount = -1;
+    newFunctionArray.push(func_mul);
+
+    var func_div = new Object();
+    func_div.evluate = function(a, b){return a/b;}
+    func_div.label = "func_div";
+    func_div.isNumber = false;
+    func_mul.isFunction = true;
+    func_mul.stackCount = -1;
+    newFunctionArray.push(func_div);
+    
+    return newFunctionArray;    
+}
+
+function initVariableArray(){
+    //後でvariableに書き直す．今はテストのため，static
+    var newStaticArray = new Array();
+    for(var i=0; i<10; i++){
+	var newStaticValue = new Object();
+	newStaticValue.value = Math.random();
+	newStaticValue.label = newStaticValue.value;
+	newStaticValue.isNumber = true;
+	newStaticValue.isFunction = false;
+	newStaticValue.stackCount = 1;
+	newStaticArray.push(newStaticValue);
+    }
+    return newStaticArray;
+}
+
+function initStaticArray(){
+    var newStaticArray = new Array();
+    for(var i=0; i<10; i++){
+	var newStaticValue = new Object();
+	newStaticValue.value = Math.random();
+	newStaticValue.label = newStaticValue.value;
+	newStaticValue.isNumber = true;
+	newStaticValue.isFunction = false;
+	newStaticValue.stackCount = 1;
+	newStaticArray.push(newStaticValue);
+    }
+    return newStaticArray;
+}
+
+function makeNumberNode(value){
+    var newValue = new Object();
+    newValue.value = value;
+    newValue.label = newValue.value;
+    newValue.isNumber = true;
+    newValue.isFunction = false;
+    newValue.stackCount = 1;
+    return newValue;
+}
+
+
+function copyToArea(fromIndex, toIndex){
+    chromosomeStorage[toIndex] = chromosomeStorage[fromIndex].concat();
+    evaluatedValueStorage[toIndex] = evaluatedValueStorage[fromIndex];
+    degreeSequenceStorage[toIndex] = degreeSequenceStorage[fromIndex].concat();
+    durationSequenceStorage[toIndex] = durationSequenceStorage[fromIndex].concat();
+    stepSequenceStorage[toIndex] = stepSequenceStorage[fromIndex].concat();
+
+
+    if(toIndex < 32){
+	applyStepSequenceFromStorage(toIndex);
+    }
+}
+
+function applyStepSequenceFromStorage(toIndex){
+    //Assign to Instruments
+    var barIndex = toIndex % 4;
+    if(toIndex < 4){
+	//Harmony
+	degreeSequences[barIndex][0] = degreeSequenceStorage[toIndex];
+	stepSequences[barIndex][0] = stepSequenceStorage[toIndex];
+    }
+    else if(toIndex < 8){
+	//Melody
+	degreeSequences[barIndex][1] = degreeSequenceStorage[toIndex];
+	stepSequences[barIndex][1] = stepSequenceStorage[toIndex];
+    }
+    else if(toIndex < 12){
+	//Arpeggio
+	degreeSequences[barIndex][2] = degreeSequenceStorage[toIndex];
+	stepSequences[barIndex][2] = stepSequenceStorage[toIndex];
+    }
+    else if(toIndex < 16){
+	//Bass
+	degreeSequences[barIndex][3] = degreeSequenceStorage[toIndex];
+	stepSequences[barIndex][3] = stepSequenceStorage[toIndex];
+    }
+    else if(toIndex < 20){
+	//Bass Drum
+	degreeSequences[barIndex][4] = degreeSequenceStorage[toIndex];
+	stepSequences[barIndex][4] = stepSequenceStorage[toIndex];
+    }
+    else if(toIndex < 24){
+	//Snare Drum
+	degreeSequences[barIndex][5] = degreeSequenceStorage[toIndex];
+	stepSequences[barIndex][5] = stepSequenceStorage[toIndex];
+    }
+    else if(toIndex < 28){
+	//Close Hi-hat
+	degreeSequences[barIndex][6] = degreeSequenceStorage[toIndex];
+	stepSequences[barIndex][6] = stepSequenceStorage[toIndex];
+    }
+    else if(toIndex < 32){
+	//CowBell
+	degreeSequences[barIndex][7] = degreeSequenceStorage[toIndex];
+	stepSequences[barIndex][7] = stepSequenceStorage[toIndex];
+    }
+}
+
+function initOffspring(){
+    var offspringIndexOffset = 32;
+    for(i=0; i<16; i++){
+	var initializedChromosome = 
+	    initChromosome(functionArray, variableArray, staticArray, -10, 5);
+	chromosomeStorage[offspringIndexOffset+i] = initializedChromosome;
+	
+	var evaluatedValue = evaluateChromosome(initializedChromosome);
+	evaluatedValueStorage[offspringIndexOffset+i] = evaluatedValue;
+	
+	var degreeAndDurationSequence = 
+	    makeMelodyFromChromosomeString(initializedChromosome, 0, 4);
+	degreeSequenceStorage[offspringIndexOffset+i] = 
+	    degreeAndDurationSequence[0].concat();
+	durationSequenceStorage[offspringIndexOffset+i] = 
+	    degreeAndDurationSequence[1].concat();
+	
+	var currentStepSequence = 
+	    makeStepSequenceFromMelody(
+		degreeAndDurationSequence[0], degreeAndDurationSequence[1], 4);
+	stepSequenceStorage[offspringIndexOffset+i] = 
+	    currentStepSequence.concat();
+	
+	var numOfNodes = 0;
+	var numOfTerminalNodes = 0;
+	var numOfFunctionNodes = 0;
+	for(var j=0; j<initializedChromosome.length; j++){
+	    numOfNodes++;
+	    if(initializedChromosome[j].isNumber)
+		numOfTerminalNodes++;
+	    else
+		numOfFunctionNodes++;
+	}
+	offspringInformation[i*4] = i;
+	offspringInformation[i*4+1] = numOfNodes;
+	offspringInformation[i*4+2] = numOfTerminalNodes;
+	offspringInformation[i*4+3] = numOfFunctionNodes;
+	//setChildrenChromosomeColor(
+	  //  i, numOfNodes, numOfTerminalNodes, numOfFunctionNodes);
+    }
+}
+
+function initSound(){
+    //emptyChromosome: func_add, func_add, 0, 0, func_add, 0, 0
+    var emptyChromosome = makeEmptyChromosome(functionArray);
+    for(i=0; i<32; i++){
+	chromosomeStorage[i] = emptyChromosome;
+	var evaluatedValue = evaluateChromosome(emptyChromosome);
+	evaluatedValueStorage[i] = evaluatedValue;
+	
+	var degreeAndDurationSequence = 
+	    makeMelodyFromChromosomeString(emptyChromosome, 0, 4);
+	degreeSequenceStorage[i] = 
+	    degreeAndDurationSequence[0].concat();
+	durationSequenceStorage[i] = 
+	    degreeAndDurationSequence[1].concat();
+	
+	var currentStepSequence = 
+	    makeStepSequenceFromMelody(
+		degreeAndDurationSequence[0], degreeAndDurationSequence[1], 4);
+	stepSequenceStorage[i] = currentStepSequence.concat();
+	
+	applyStepSequenceFromStorage(i);
+    }
+}
+
+function makeEmptyChromosome(functions){
+    var newEmptyChromosome = new Array();
+    newEmptyChromosome.push(functions[0]);
+    newEmptyChromosome.push(functions[0]);
+    newEmptyChromosome.push(makeNumberNode(0.0));
+    newEmptyChromosome.push(makeNumberNode(0.0));
+    newEmptyChromosome.push(functions[0]);
+    newEmptyChromosome.push(makeNumberNode(0.0));
+    newEmptyChromosome.push(makeNumberNode(0.0));
+    return newEmptyChromosome;
+}
+
+function initGPEngine(){
+    //Delete Parent Individuals
+    chromosomeStorage[24] = null;
+    chromosomeStorage[25] = null;
+    //re-initialize offspring individuals
+    initOffspring();
+    //initialize sound
+    initSound();
+}
+
+function reproduction(){
+    if((chromosomeStorage[48] != null) && (chromosomeStorage[25] != null)){
+	var offspringIndex = 32;
+	for(var i=0; i<16; i++){
+	    //Offspring4個体分を生成し，突っ込む．
+	    var newChildChromosome = 
+		mutationChromosome(
+		    crossoverChromosome(
+			chromosomeStorage[24], chromosomeStorage[25]), 
+		    functionArray, variableArray, staticArray);
+	    chromosomeStorage[offspringIndex+i] = newChildChromosome;
+
+	    var newChildEvaluatedValue = 
+		evaluateChromosome(newChildChromosome);
+	    evaluatedValueStorage[offspringIndex+i] = newChildEvaluatedValue;
+
+	    var newDegreeAndDurationSequence = 
+		makeMelodyFromChromosomeString(newChildChromosome, i, 4)
+	    var newDegreeSequence = newDegreeAndDurationSequence[0];
+	    var newDurationSequence = newDegreeAndDurationSequence[1];
+	    degreeSequenceStorage[offspringIndex+i] = newDegreeSequence;
+	    durationSequenceStorage[offspringIndex+i] = newDurationSequence;
+
+	    var newStepSequence = makeStepSequenceFromMelody(newDegreeSequence, newDurationSequence, 4);
+	    stepSequenceStorage[offspringIndex+i] = newStepSequence;
+
+	    var numOfNodes = 0;
+	    var numOfTerminalNodes = 0;
+	    var numOfFunctionNodes = 0;
+	    for(var j=0; j<newChildChromosome.length; j++){
+		numOfNodes++;
+		if(newChildChromosome[j].isNumber)
+		    numOfTerminalNodes++;
+		else
+		    numOfFunctionNodes++;
+	    }
+	    offspringInformation[i*4] = i;
+	    offspringInformation[i*4+1] = numOfNodes;
+	    offspringInformation[i*4+2] = numOfTerminalNodes;
+	    offspringInformation[i*4+3] = numOfFunctionNodes;
+	    
+	    //setChildrenChromosomeColor(
+	    //i, numOfNodes, numOfTerminalNodes, numOfFunctionNodes);
+	}
+    }
+    else{
+	alert("Both Parent is required for reproduction !!");
+    }
+}
+
+
+function initChromosome(functionArray, variableArray, staticArray, minimumSC, minimumLength){
+    var newArray = new Array();
+    var sumOfStackCount = 0;
+    var terminalNodeArray = new Array();
+    var flagMoreThanMinimum = false;
+    var maximumLength = 20;
+    var addTerminalNode = false;
+
+    //integrate terminal node lists
+    for(var i=0; i<variableArray.length; i++){
+	terminalNodeArray.push(variableArray[i]);
+    }
+    for(var i=0; i<staticArray.length; i++){
+	terminalNodeArray.push(staticArray[i]);
+    }
+
+    //Top Node is Function Node
+    sumOfStackCount = 0;
+    if(minimumLength != 0){
+	newArray.push( 
+	    functionArray[parseInt(Math.random() * functionArray.length-1)]);
+	sumOfStackCount = newArray[newArray.length-1].stackCount;
+    }
+    
+    //After Second Node
+    while(sumOfStackCount < 1){
+	if(Math.random() > 0.5)
+	    addTerminalNode = true;
+	else
+	    addTerminalNode = false;
+
+	//Fource to decide addting nodes
+	if(newArray.length < minimumLength &&
+	   sumOfStackCount > minimumSC &&
+	   sumOfStackCount > -1){
+	    addTerminalNode = false;
+	}
+	else{
+	    if(sumOfStackCount < minimumSC){
+		addTerminalNode = true;
+	    }
+	    if(newArray.length >= maximumLength){
+		addTerminalNode = true;
+	    }
+	}
+
+	if(addTerminalNode){
+	    //Case add Terminal Node
+	    var currentAddingNode = 
+		terminalNodeArray[parseInt(Math.random() * terminalNodeArray.length-1)];
+	    newArray.push(currentAddingNode);
+	}
+	else{
+	    //Case add Function Node
+	    newArray.push
+	    (functionArray[parseInt(Math.random()*functionArray.length-1)]);
+	}
+	sumOfStackCount += newArray[newArray.length-1].stackCount;
+    }
+    //Check StackCount
+    sumOfStackCount = 0;
+    for(var i=0; i<newArray.length; i++){
+	sumOfStackCount += newArray[i].stackCount;
+    }
+    if(sumOfStackCount != 1){
+	alert("Error: initChromosome: sum of stack count is not 1");
+	alert(newArray);
+    }
+    
+    return newArray.concat();
+}
+
+function evaluateChromosome(evaluatingChromosome){
+    var sumOfStackCount = 0;
+    var deepestStackCount = 0;
+    var evaluatingIndex = 0;
+    var subTreeStackCount = 0;
+    var givenChromosome = evaluatingChromosome.concat();
+    while(givenChromosome.length > 1){
+	sumfOfStackCount = 0;
+	evaluatingIndex = -1;
+	var indexOfFunctions = new Array();
+	var subTree = new Array();
+	
+	//Make indexes of Function Nodes
+	for(var i=0; i<givenChromosome.length; i++){
+	    if(givenChromosome[i].isNumber){
+		sumOfStackCount++;
+	    }
+	    else{
+		sumOfStackCount += givenChromosome[i].stackCount;
+		indexOfFunctions.push(i);
+	    }
+	}
+	//Detect Top Node of Subtree to which Evaluate First
+	for(var i=0; i<indexOfFunctions.length; i++){
+	    if(givenChromosome[indexOfFunctions[i]].stackCount == -1){
+		if(givenChromosome[indexOfFunctions[i]+1].isNumber &&
+		   givenChromosome[indexOfFunctions[i]+2].isNumber){
+		    evaluatingIndex = indexOfFunctions[i];
+		}
+	    }
+	    else if(givenChromosome[indexOfFunctions[i]].stackCount == 0){
+		if(givenChromosome[indexOfFunctions[i]+1].isNumber){
+		    evaluatingIndex = indexOfFunctions[i];
+		}
+	    }
+	}
+	//Detect Subtree to evaluate
+	subTree = new Array();
+	var subTreeLabelArray = new Array();
+	subTreeStackCount = 0;
+	while(subTreeStackCount < 1){
+	    if(givenChromosome[evaluatingIndex].isNumber){
+		subTreeStackCount += 1;
+	    }
+	    else{
+		subTreeStackCount += 
+		givenChromosome[evaluatingIndex].stackCount;
+	    }
+	    subTree.push(givenChromosome[evaluatingIndex]);
+	    subTreeLabelArray.push(givenChromosome[evaluatingIndex].label);
+	    givenChromosome.splice(evaluatingIndex, 1);
+	}
+	//Evaluate Single Subtree
+	//ToDo FunctionNodeのラベルの張り替えに対応する．
+	var evaluatedValue;
+	if(subTree[0].stackCount == -1)
+	    evaluatedValue = 
+	    makeNumberNode(subTree[0].evaluate(subTree[1].value, subTree[2].value));
+	else if(subTree[0].stackCount = 0)
+	    evaluatedValue = 
+	    makeNumberNode(subTree[0].evaluate(subTree[1].value));
+	givenChromosome.splice(evaluatingIndex, 0, evaluatedValue);
+    }
+    return givenChromosome.concat();
+}
+
+function crossoverChromosome(firstParent, secondParent){
+    var parentsArray = new Array();
+    var crossPointsArray = new Array();
+    var subTreeArray = new Array();
+    var sumOfStackCount = 0;
+    var subTree;
+
+    //Decide base and sub for crossover, then make copy of chromosome to edit
+    parentsArray.push(firstParent.concat());
+    parentsArray.push(secondParent.concat());
+    if(Math.random() > 0.5){
+	parentsArray.reverse();
+    }
+    
+    for(var i=0; i<2; i++){
+	sumOfStackCount = 0;
+	subTree = new Array();
+	//Decide both crossover point
+	crossPointsArray.push(parseInt(Math.random() * parentsArray[i].length -2) + 1);
+	//alert(i+":crossPoint:"+crossPointsArray[i] + "in " + parentsArray[i].length);
+	//Extract SubTree (also remove the subtree from base tree)
+	while(sumOfStackCount < 1){
+	    if(parentsArray[i][crossPointsArray[i]].isNumber){
+		sumOfStackCount++;
+	    }
+	    else{
+		sumOfStackCount += 
+		parentsArray[i][crossPointsArray[i]].stackCount;
+	    }
+	    subTree.push(parentsArray[i][crossPointsArray[i]]);
+	    parentsArray[i].splice(crossPointsArray[i], 1);
+	}
+	subTreeArray.push(subTree);
+    }
+    
+    //Insert SubTree
+    for(var i=0; i<subTreeArray[1].length; i++){
+	parentsArray[0].splice(crossPointsArray[0]+i, 0, subTreeArray[1][i]);
+    }
+
+    //check StackCount
+    sumOfStackCount = 0;
+    for(var i=0; i<parentsArray[0].length; i++){
+	if(parentsArray[0][i].isNumber){
+	    sumOfStackCount++;
+	}
+	else{
+	    sumOfStackCount += parentsArray[0][i].stackCount;
+	}
+    }
+    if(sumOfStackCount != 1){
+	alert("Error:crossover: sum of stack count is not 1");
+	alert(parentsArray[0]);
+    }
+    return parentsArray[0].concat();
+}
+
+function mutationChromosome(givenArray, functionArray, variableArray, staticArray){
+    var newArray = givenArray.concat();
+    var nodeArray = new Array();
+    var dumpArray = new Array();
+    var mutatePoint = parseInt(Math.random() * givenArray.length -1);
+    var minimumStackCount = 0;
+    var sumOfStackCount = 0;
+    var newSubTree = new Array();
+    var returnedTree = new Array();
+    var countOfNewSubTree = 0;
+
+    //Decide MutationPoint and remove a node or subtree on the mutation point.
+    sumOfStackCount = 0;
+    while(sumOfStackCount < 1){
+	if(newArray[mutatePoint].isNumber){
+	    sumOfStackCount++
+	}
+	else{
+	    sumOfStackCount += newArray[mutatePoint].stackCount;
+	}
+	newSubTree.push(newArray[mutatePoint]);
+	dumpArray.push(newArray[mutatePoint]);
+	newArray.splice(mutatePoint, 1);
+	countOfNewSubTree = newSubTree.length;
+
+	if(minimumStackCount > sumOfStackCount){
+	    minimumStackCount = sumOfStackCount;
+	}
+    }
+
+    //Make new subtree. depth of subtree is same as the removed subtree.
+    newSubTree = 
+	initChromosome(functionArray, variableArray, staticArray, minimumStackCount, 1);
+    sumOfStackCount = 0;
+    for(var i=0; i<newSubTree.length; i++){
+	if(newSubTree[i].isNumber){
+	    sumOfStackCount++;
+	}
+	else{
+	    sumOfStackCount += newSubTree[i].stackCount;
+	}
+    }
+    if(sumOfStackCount != 1){
+	alert("Error: mutationChromosome: initialized subTree's stack count is not 1");
+    }
+
+    for(var i=0; i<newSubTree.length; i++){
+	newArray.splice(mutatePoint+i, 0, newSubTree[i]);
+    }
+    //check StackCount of new chromosome
+    sumOfStackCount = 0;
+    for(var i=0; i<newArray.length; i++){
+	if(newArray[i].isNumber)
+	    sumOfStackCount++;
+	else
+	    sumOfStackCount += newArray[i].stackCount;
+    }
+    if(sumOfStackCount != 1){
+	alert("Error: mutationChromosome: mutated chromosome's stack count is not 1");
+    }
+    
+    return newArray.concat();
+}
+
+
+function makeMelodyFromChromosomeString(givenArray, positionIndex, numOfBeat){
+    var counter =0;
+    var forDegree;
+    var forDuraion;
+    var hasFunctionNode = true;
+
+    var newArray;
+    var functionIndex = -1;
+    var orderPattern = -1;
+    var countOfFunction = 0;
+    var durationArgs;
+    var degreeArgs;
+    var withOutSC0Array = new Array();
+    var numOfFunction = 0;
+
+    var baseChromosome = givenArray.concat();
+
+    //Default Chromosome for Inilialize generate [\reste, \reste] list
+
+    if(baseChromosome.length == 1){
+	baseChromosome = new Array();
+	baseChromosome.push(func_plus);
+	baseChromosome.push(-1);
+	baseChromosome.push(-1);
+    }
+
+    //change Variable to number
+    //baseChromosome = convertVariableStringToNumber(baseChromosome, positionIndex);
+
+    //Remove function node has Stack Count 0
+    for(var i=0; i<baseChromosome.length; i++){
+	if(baseChromosome[i].isFunction && 
+	   baseChromosome[i].stackCount == 0){
+	    //8th 4th 8th
+	}
+	else{
+	    withOutSC0Array.push(baseChromosome[i]);
+	}
+    }
+    baseChromosome = withOutSC0Array;
+
+    //make forDegree Array and forDuration Array
+    forDegree = baseChromosome.concat();
+    forDuration = new Array();
+    for(var i=0; i<baseChromosome.length; i++){
+	if(baseChromosome[i].isNumber)
+	    forDuration.push(makeNumberNode(numOfBeat));
+	else
+	    forDuration.push(baseChromosome[i]);
+    }
+
+    //Check numOfFunction
+    for(var i=0; i<forDegree.length; i++){
+	if(forDegree[i].isFunction)
+	    numOfFunction++;
+    }
+
+    //Detect processing smallest subtree
+    counter = 0;
+    while(counter < numOfFunction){
+	var functionIndex = -1;
+	var orderPattern = -1;
+	var countOfFunction = 0;
+	var durationArgs = new Array();
+	var degreeArgs = new Array();
+
+	for(var i=0; i<forDegree.length; i++){
+	    if(forDegree[i].isFunction){
+		if(forDegree[i+1].isNumber && forDegree[i+2].isNumber){
+		    functionIndex = i; orderPattern = "NN";
+		    break;
+		}
+		else if(forDegree[i+1].isNumber && forDegree[i+2] instanceof Array){
+		    functionIndex = i; orderPattern = "NL";
+		}
+		else if(forDegree[i+1] instanceof Array  && forDegree[i+2].isNumber){
+		    functionIndex = i; orderPattern = "LN";
+		}
+		else if(forDegree[i+1] instanceof Array && forDegree[i+2] instanceof Array){
+		    functionIndex = i; orderPattern = "LL";
+		}
+	    }
+	}
+
+	if(functionIndex == -1){
+	    alert("makeDurationAndDegreeListFromChromosomeString has no evaluating function node");
+	}
+
+	//make list instead of func_** subtree
+	forDegree.splice(functionIndex, 1);
+	for(var i=0; i<2; i++){
+	    degreeArgs.push(forDegree[functionIndex]);
+	    forDegree.splice(functionIndex, 1);
+	}
+	forDuration.splice(functionIndex, 1);
+	for(var i=0; i<2; i++){
+	    durationArgs.push(forDuration[functionIndex]);
+	    forDuration.splice(functionIndex, 1);
+	}
+
+	if(orderPattern == "NN"){
+	    newArray = new Array();
+	    for(var i=0; i<durationArgs.length; i++)
+		newArray.push(makeNumberNode(durationArgs[i].value / 2));
+	    forDuration.splice(functionIndex, 0, newArray);
+
+	    newArray = degreeArgs.concat();
+	    forDegree.splice(functionIndex, 0, newArray);
+	}
+	else if(orderPattern == "NL"){
+	    newArray = new Array();
+	    newArray.push(makeNumberNode(durationArgs[0].value / 2));
+	    for(var i=0; i<durationArgs[1].length; i++)
+		newArray.push(makeNumberNode(durationArgs[1][i].value / 2));
+	    forDuration.splice(functionIndex, 0, newArray);
+
+	    newArray = new Array();
+	    newArray.push(degreeArgs[0]);
+	    for(var i=0; i<degreeArgs[1].length; i++)
+		newArray.push(degreeArgs[1][i]);
+	    forDegree.splice(functionIndex, 0 , newArray);
+	}
+	else if(orderPattern == "LN"){
+	    newArray = new Array();
+	    for(var i=0; i<durationArgs[0].length; i++)
+		newArray.push(makeNumberNode(durationArgs[0][i].value / 2));
+	    newArray.push(makeNumberNode(durationArgs[1].value / 2));
+	    forDuration.splice(functionIndex, 0, newArray);
+
+	    newArray = new Array();
+	    for(var i=0; i<degreeArgs[0].length; i++)
+		newArray.push(degreeArgs[0][i]);
+	    newArray.push(degreeArgs[1]);
+	    forDegree.splice(functionIndex, 0, newArray);
+	}
+	else if(orderPattern == "LL"){
+	    newArray = new Array();
+	    for(var i=0; i<durationArgs.length; i++)
+		for(var j=0; j<durationArgs[i].length; j++)
+		    newArray.push(makeNumberNode(durationArgs[i][j].value / 2));
+	    forDuration.splice(functionIndex, 0, newArray);
+
+	    newArray = new Array();
+	    for(var i=0; i<degreeArgs.length; i++)
+		for(var j=0; j<degreeArgs[i].length; j++)
+		    newArray.push(degreeArgs[i][j]);
+	    forDegree.splice(functionIndex, 0, newArray);
+	}
+	//Check Ending Condition
+	//if the top node become Array, all function are removed
+	//if(instanceof forDegree[0]) hasFunctionNode = false;
+	if(forDegree.length == 1)
+	    hasFunctionNode = false;
+	counter++;
+    }
+    forDegree = forDegree[0];
+    forDuration = forDuration[0];
+    var returnArray = new Array();
+    var forDegreeInNumber = new Array();
+    for(var i=0; i<forDegree.length; i++)
+	forDegreeInNumber.push(forDegree[i].value);
+    var forDurationInNumber = new Array();
+    for(var i=0; i<forDuration.length; i++)
+	forDurationInNumber.push(forDuration[i].value);
+    returnArray.push(forDegreeInNumber);
+    returnArray.push(forDurationInNumber);
+    return returnArray;
+}
+
+function makeStepSequenceFromMelody(givenDegreeSequence, givenDurationSequence, numOfBeat){
+    //拍子は4/4で固定
+    //最小単位を16分音符，0.25とする．長さがこの倍数で無い時には統合．
+    //0が継続，-1が休符，それ以外はピッチ
+    var stepSequenceParBar = new Array();
+    var toneContinue = false;
+    var remainingTimeForContinue = -1;
+    var counterIndex = 0; //degreeSequenceとdurationSequenceから読み出す値
+    var degreeSequence = givenDegreeSequence.concat();
+    var durationSequence = givenDurationSequence.concat();
+
+    //まずはじめに0.25より短い音を後ろの音に接続する処理を行う．
+    while(true){
+	var currentDuration = durationSequence[counterIndex];
+	if(currentDuration < 0.25){
+	    durationSequence.splice(counterIndex, 1);
+	    degreeSequence.splice(counterIndex, 1)
+	    durationSequence.splice(counterIndex, 1, currentDuration + durationSequence[counterIndex])
+	}
+	else{
+	    counterIndex++;
+	    if(counterIndex == degreeSequence.length)
+		break;
+	}
+    }
+    
+    //次に実際にstepSequenceParBarに配列を起こしていく作業を行う
+    counterIndex = 0;
+    for(var i=0; i<16; i++){
+	if(toneContinue){
+	    remainingTimeForContinue -= 0.25;
+	    if(remainingTimeForContinue == 0){
+		//その音が丁度終る場合，
+		remainingTimeForContinue = -1;
+		toneContinue = false;
+		counterIndex++;
+	    }
+	    else if(remainingTimeForContinue < 0){
+		//16分音符以下で次の音が食っている場合，
+		//食わないようにする
+
+		//現在の音長を不足分だけ足す．
+		durationSequence.splice 
+		(counterIndex, 1, 
+		 durationSequence[counterIndex+1] + remainingTimeForContinue * -1);
+		//次の音長を不足分だけ引く．
+		durationSequence.splice
+		(counterIndex+1, 1, 
+		 durationSequence[counterIndex+1] + remainingTimeForContinue);
+
+		remainingTimeForContinue = -1;
+		toneContinue = false;
+		counterIndex++;
+	    }
+	    else{
+		//音が継続している場合，何もしない
+	    }
+	    
+	    stepSequenceParBar.push(0);
+	}
+	else{
+	    if(durationSequence[counterIndex] == 0.25){
+		if(degreeSequence[counterIndex] < 0)
+		    stepSequenceParBar.push(-1);
+		else
+		    stepSequenceParBar.push(degreeSequence[counterIndex]);
+		
+		toneContinue = false;
+		remainingTimeForContinue = -1;
+		counterIndex++;
+	    }
+	    else if(durationSequence[counterIndex] > 0.25){
+		if(degreeSequence[counterIndex] < 0)
+		    stepSequenceParBar.push(-1);
+		else
+		    stepSequenceParBar.push(degreeSequence[counterIndex]);
+		toneContinue = true;
+		remainingTimeForContinue = durationSequence[counterIndex] - 0.25;
+	    }
+	    else{
+		//0.25より短い場合
+		//次の音を登録して統合する．
+		stepSequenceParBar.pop();
+		stepSequenceParBar.push(degreeSequence[counterIndex+1]);
+		remainingTimeForContinue = 
+		    durationSequence[counterIndex] + 
+		    durationSequence[counterIndex+1] - 0.25;
+		toneContinue = true;
+	    }
+	}
+    }
+    return stepSequenceParBar;
+}
+
+function makeFreqArray(){
+   //C1:32:703, D1:36.708, E1:41.203, F1:43.654, G1:48.999, A1:55.000, B1:61.753
+    freqArray.push(32.703); freqArray.push(36.708); freqArray.push(43.999);
+    freqArray.push(43.654); freqArray.push(48.999); freqArray.push(55.000);
+    freqArray.push(61.753);
+    //C2:65.406, D2:73.416, E2:82.407, F2:87.307, G2:97.999, A2:110.00, B2:123.47
+    freqArray.push(65.406); freqArray.push(73.416); freqArray.push(82.407);
+    freqArray.push(87.307); freqArray.push(97.999); freqArray.push(110.00);
+    freqArray.push(123.47);
+    //C3:130.81, D3:146.83, E3:164.81, F3:174.61, G3:196.00, A3:220.00, B3:246.94
+    freqArray.push(130.81); freqArray.push(146.83); freqArray.push(164.81);
+    freqArray.push(174.61); freqArray.push(196.00); freqArray.push(220.00);
+    freqArray.push(246.94);
+    //C4:261.63, D4:293.67, E4:329.63, F4:349.23, G4:392.00, A4:440.00, B4:493.88
+    freqArray.push(261.63); freqArray.push(293.67); freqArray.push(329.23);
+    freqArray.push(349.23); freqArray.push(392.00); freqArray.push(440.00);
+    freqArray.push(493.88);
+    //C5:523.23, D5:587.33, E5:659.26, F5:698.46, G5:783.99, A5:880.00, B5:987.77
+    freqArray.push(523.23); freqArray.push(587.33); freqArray.push(659.26);
+    freqArray.push(698.46); freqArray.push(783.99); freqArray.push(880.00);
+    freqArray.push(987.77);
+    //C6:1046.5, D6:1174.7, E6:1318.5, F6:1396.9, G6:1568.0, A6:1760.0, B6:1975.5
+    freqArray.push(1046.5); freqArray.push(1174.7); freqArray.push(1318.5);
+    freqArray.push(1396.9); freqArray.push(1568.0); freqArray.push(1760.0);
+    freqArray.push(1975.5);
+
+    //C7:2093.0, D7:2349.3, E7:2637.0, F7:2793.0, G7:3136.0, A7:3520.0, B7:3951.1
+    freqArray.push(2093.0); freqArray.push(2349.3); freqArray.push(2637.0);
+    freqArray.push(2793.0); freqArray.push(3136.0); freqArray.push(3520.0);
+    freqArray.push(3951.1);
+    //C8:4186.0
+    freqArray.push(4186.0);
+}
+
+function makeFrequencyFromDegreeValue(octaveOffset, octaveRange, degreeValue){
+    var frequency = 0;
+    var degree = 
+	parseInt(degreeValue * octaveRange * 7 + 1) + (octaveOffset-1) * 7;
+    frequency = freqArray[degree];
+    if(frequency == 0)
+	alert("Frequency is out of note range!");
+    return frequency;
+}
+
+function makeDrumSoundData(){
+    // Bass Drum
+    paramDataDrum = new Array();
+    paramDataDrum.push(new Array("synth",0.0000,1.0000,0.0000,0.0320,0.0780,0.0040,203.0000,59.0000,347.0000,-1.0000,-0.4920,0.0000,7.9763,0.0003,0.0000,-0.1280,0.4360,0.2120,-0.5300,0.0432,0.0000,0.0000,1.0000,1.0000,1.0000,0.0000,-1.0000));
+    // Snare Drum
+    paramDataDrum.push(new Array("noise",0.0000,0.2000,0.0020,0.0740,0.2310,0.1500,564.0000,1146.0000,2378.0000,-0.7720,0.0000,0.0000,7.9763,0.0003,0.0000,0.7940,0.4360,0.2880,-0.5300,0.0432,0.0000,0.0000,1.0000,0.9200,0.3570,0.0330,-0.9300));
+    // Close Hi-Hat
+    //paramDataDrum.push(new Array("noise",0.0000,0.6000,0.0020,0.0040,0.0000,0.0180,2400.0000,2400.0000,2400.0000,0.0000,0.0000,0.0020,0.0100,-0.3000,-0.9960,-1.0000,0.0000,0.0000,-1.0000,0.0000,-0.8880,-1.0000,1.0000,1.0000,1.0000,1.0000,1.0000));
+    //Open Hi-Hat
+    paramDataDrum.push(new Array("noise",0.0000,0.3000,0.0020,0.0040,0.0000,0.2760,2400.0000,2400.0000,2400.0000,0.0000,0.0000,0.0020,0.0100,-0.3000,-0.9960,-1.0000,0.0000,0.0000,-1.0000,0.0000,-0.8880,-1.0000,1.0000,1.0000,1.0000,1.0000,1.0000));
+    // CowBell
+    paramDataDrum.push(new Array("saw",0.0000,0.4000,0.0000,0.0000,0.0060,0.2840,20.0000,1024.0000,2000.0000,0.0000,0.0000,0.0050,3.1294,0.0003,-0.8500,-0.0860,0.1000,0.0760,0.0000,0.0000,-0.1560,0.1460,1.0000,-0.1880,0.1560,0.8460,-0.3420));
+    soundDataDrum = new Array();
+    //Bass Drum
+    soundDataDrum.push(jsfx.generate(jsfxlib.arrayToParams(paramDataDrum[0])));
+    //Snare Durm
+    soundDataDrum.push(jsfx.generate(jsfxlib.arrayToParams(paramDataDrum[1])));
+    //Open Hi-Hat
+    soundDataDrum.push(jsfx.generate(jsfxlib.arrayToParams(paramDataDrum[2])));
+    //CowBell
+    soundDataDrum.push(jsfx.generate(jsfxlib.arrayToParams(paramDataDrum[3])));
+}
+
+function makeHarmonySoundData(){
+    //シンセサイザパラメータの設定
+    //Harmony
+    paramDataHarmony = new Array("synth",0.0000,/*ここがマスターボリューム*/0.2000,0.1000,/*ここが長さ，ただしディケイタイムは含まない*/3.0000,0.2790,/*ここがディケイタイム*/1.2300,2295.0000,/*ここがピッチ*/941.0000,20.0000,-1.0000,-0.9960,0.0260,36.5784,-0.2844,-0.9760,-1.0000,0.0000,0.2520,0.7200,0.1816,0.0860,-0.4440,0.8880,0.7160,0.7570,0.9540,0.4320);
+    
+    soundDataHarmony = new Array();
+    for(var i=0; i<15; i++){
+	paramDataHarmony[8] = makeFrequencyFromDegreeValue(4, 2, i/15);
+	soundDataHarmony.push(
+	    jsfx.generate(jsfxlib.arrayToParams(paramDataHarmony)));
+    }
+}
+
+function makeBassSoundData(){
+    paramDataBass = new Array("squre",0.0000,/*ここがマスターボリューム*/0.6000,0.0500,/*ここが長さ，ただしディケイタイムは含まない*/0.1250,0.2790,/*ここがディケイタイム*/0.7500,2295.0000,/*ここがピッチ*/941.0000,20.0000,-1.0000,-0.9960,0.0260,36.5784,-0.2844,-0.9760,-1.0000,0.0000,0.2520,0.7200,0.1816,0.0860,-0.4440,0.8880,0.7160,0.7570,0.9540,0.4320);
+
+    soundDataBass = new Array();
+    for(var i=0; i<15; i++){
+	paramDataBass[8] = makeFrequencyFromDegreeValue(0, 2, i/15);
+	soundDataBass.push(jsfx.generate(jsfxlib.arrayToParams(paramDataBass)));
+    }
+}
+
+function makeArpeggioSoundData(){
+    paramDataArpeggio = new Array("synth",0.0000,/*ここがマスターボリューム*/0.4000,0.02000,/*ここが長さ，ただしディケイタイムは含まない*/0.1250,0.2790,/*ここがディケイタイム*/0.7500,2295.0000,/*ここがピッチ*/941.0000,20.0000,-1.0000,-0.9960,0.0260,36.5784,-0.2844,-0.9760,-1.0000,0.0000,0.2520,0.7200,0.1816,0.0860,-0.4440,0.8880,0.7160,0.7570,0.9540,0.4320);
+    
+    //Arpeggio用の音を作る
+    soundDataArpeggio = new Array();
+    for(var i=0; i<15; i++){
+	paramDataArpeggio[8] = 
+	    makeFrequencyFromDegreeValue(5, 2, i/15);
+	soundDataArpeggio.push(
+	    jsfx.generate(jsfxlib.arrayToParams(paramDataArpeggio)));
+    }
+}
+
+function makeMelodySoundData(){
+    paramDataMelodies = new Array("synth",0.0000,/*ここがマスターボリューム*/0.4000,0.02000,/*ここが長さ，ただしディケイタイムは含まない*/0.1250,0.2790,/*ここがディケイタイム*/0.7500,2295.0000,/*ここがピッチ*/941.0000,20.0000,-1.0000,-0.9960,0.0260,36.5784,-0.2844,-0.9760,-1.0000,0.0000,0.2520,0.7200,0.1816,0.0860,-0.4440,0.8880,0.7160,0.7570,0.9540,0.4320);
+    
+    //Melody用の音を作る
+    soundDataMelodies = new Array();
+    for(var i=0; i<15; i++){
+	paramDataMelodies[8] = 
+	    makeFrequencyFromDegreeValue(5, 2, i/15);
+	soundDataMelodies.push(
+	    jsfx.generate(jsfxlib.arrayToParams(paramDataMelodies)));
+    }
+}
+
+
+function makeAudioFromStepSequence(givenDegreeSequences, givenStepSequences, positionIndex){
+    var currentHarmonyDegree = new Array();
+    for(var i=0; i<4; i++){
+	currentHarmonyDegree.push(parseInt(soundDataHarmony.length * givenDegreeSequences[0][i]));
+    }
+    currentHarmonyDegree.sort();
+    harmonyArray[positionIndex] = currentHarmonyDegree;
+
+    //リリースタイムを考慮して，1小節の2倍の長さの配列を生成
+    for(var i=0; i<audioArray.length; i++)
+	audioArray[i] = 0;
+    
+    var sampleCounter = 0;
+    //以下を各パートごとにどんどん足していく
+    for(var i=0; i<16; i++){
+	//Harmonyは全音延ばしなので別(サンプルの長さも同じはず)
+	if(i == 0){
+	    for(var j=0; j<soundDataHarmony[0].length; j++){
+		audioArray[sampleCounter+j] += 
+		soundDataHarmony[harmonyArray[positionIndex][0]][j];
+		audioArray[sampleCounter+j] += 
+		soundDataHarmony[harmonyArray[positionIndex][1]][j];
+		audioArray[sampleCounter+j] += 
+		soundDataHarmony[harmonyArray[positionIndex][2]][j];
+		audioArray[sampleCounter+j] += 
+		soundDataHarmony[harmonyArray[positionIndex][3]][j];
+	    }
+	}
+
+	//Melodies
+	var indexOfMelodiesTrackOffset = 1;
+	if(givenStepSequences[indexOfMelodiesTrackOffset][i] > 0){
+	    var currentMelodyDegree = 
+		parseInt(givenStepSequences[indexOfMelodiesTrackOffset][i] * soundDataMelodies.length);
+	    for(var j=0; j<soundDataMelodies[currentMelodyDegree].length; j++){
+		audioArray[sampleCounter+j] += 
+		soundDataMelodies[currentMelodyDegree][j];
+	    }
+	}
+	//Arpeggio
+	var indexOfArpeggioTrackOffset = 2;
+	if(givenStepSequences[indexOfArpeggioTrackOffset][i] > 0){
+	    var currentArpeggioDegree = 
+		parseInt(givenStepSequences[indexOfArpeggioTrackOffset][i] * soundDataMelodies.length);
+	    for(var j=0; j<soundDataArpeggio[currentArpeggioDegree].length; j++){
+		audioArray[sampleCounter+j] +=
+		soundDataArpeggio[currentArpeggioDegree][j];
+	    }
+	}
+
+
+	// Bass
+	var indexOfBassTrackOffset = 3;
+	if(givenStepSequences[indexOfBassTrackOffset][i] > 0){
+	    var currentBassInHarmony = 
+		parseInt(givenStepSequences[indexOfBassTrackOffset][i] * harmonyArray[positionIndex].length);
+	    var currentBassDegree = 
+		harmonyArray[positionIndex][currentBassInHarmony];
+	    for(var j=0; j<soundDataBass[currentBassDegree].length; j++){
+		audioArray[sampleCounter+j] += 
+		soundDataBass[currentBassDegree][j];
+	    }
+	}
+
+	// Drum Kit
+	var indexOfDrumTrackOffset = 4;
+	//alert(soundDataDrum.length);
+	for(var j=0; j<soundDataDrum.length; j++){
+	    if(givenStepSequences[indexOfDrumTrackOffset+j][i] > 0){
+		for(var k=0; k<soundDataDrum[j].length; k++){
+		    audioArray[sampleCounter+k] += soundDataDrum[j][k];
+		}
+	    }
+	}
+	sampleCounter += numOfSamplePar16th;
+    }
+    audioObjs[positionIndex] = audio.make(audioArray);
+    return;
+}
+
+
+$(document).ready(function(){
+    //Documentが完全に読み込まれた時に実行される関数
+    //Listenerの登録
+    $(btn1).click(playAudio);
+    $(btn2).click(stopAudio);
+});
+
+function playAudio(){
+    //サウンドの再生
+    clearTimeout(timeOutTimerID);
+    //for(var i=0; i<4; i++)
+    //audioObjArray[i].pause();
+    var nextCounter = playingBarCounter + 1;
+    if(nextCounter >= 4)
+	nextCounter = 0;
+    var nextNextCounter = nextCounter + 1;
+    if(nextNextCounter >= 4)
+	nextNextCounter = 0;
+    var nextNextNextCounter = nextNextCounter + 1;
+    if(nextNextNextCounter >= 4)
+	nextNextNextCounter = 0;
+
+    audioObjs[playingBarCounter].play();
+    timeOutTimerID = setTimeout(playAudio, 4000 * tempo);
+    //次に再生するRhythm群の小節を読み込む
+    setTimeout(audioObjs[nextCounter].load, 1000 * tempo);
+    
+    //2拍分処理待ちをしてから，Audioオブジェクトを生成．
+    setTimeout(makeAudioFromStepSequence, 7000 * tempo, degreeSequences[nextNextCounter], stepSequences[nextNextCounter], nextNextCounter);
+
+    playingBarCounter = nextCounter;
+}
+
+function stopAudio(){
+    //alert("stopAudio called");
+    //サウンドの停止
+    if(timeOutTimerID != null){
+	clearTimeout(timeOutTimerID);
+	audioObjs[0].pause();
+	audioObjs[1].pause();
+	audioObjs[2].pause();
+	audioObjs[3].pause();
+    }
+}
+
+</script>
+<script type="text/processing" data-processing-target="processing_canvas">
+/* @pjs preload="photo_ex0.jpg, photo_ex1.jpg, photo_ex2.jpg, photo_ex3.jpg, icon/Button_InitGP.png, icon/Button_InitPop.png, icon/Button_InitSounds.png, icon/Button_Reproduction.png, icon/cowbell.gif, icon/e_bass.png, icon/keyboard.gif, icon/snaredrum.gif, icon/timpani.gif, icon/Label_Bass.png, icon/Label_Harmony.png, icon/Label_Melodies.png, icon/Label_Offspring.png, icon/Label_Parents.png, icon/Label_Percussion.png, icon/Label_Collections.png, icon/HiHat.png"; */
+
+int numberOfPhoto = 4;
+PImage[] photoImages = new PImage[numberOfPhoto];
+int[][] photoSizes = new int[numberOfPhoto][2];
+
+PImage button_InitGPEngine, button_InitPop, button_Reproduction;
+PImage button_InitSounds;
+PImage label_Harmony, label_Percussion, label_Melodies, label_Bass;
+PImage label_Parents, label_Offspring, label_Storage;
+PImage label_Collections;
+PImage keyBoard1, keyBoard2, keyBoard3, timpani, snareDrum, cowbell, e_bass, HiHat;
+
+int[][] chromosomeArea = new int[48][4];
+//->(Harmony, DrumKit*4, Bass, Melody, Arpeggio) * 4 + Collections * 16
+color[] chromosomeAreaColor = new color[48];
+boolean[] chromosomeAreaHasChromosome = new boolean[48];
+int onMouseBox = -1;
+int draggingChromosome = -1;
+color draggingChromosomeColor;
+int[][] distanceFromReleasePointToTargetBox = new int[15][2];
+
+int targetChromosomeAreaOfDrag = -1;
+int releaseTimeCounter = 0;
+float currentTempo = 0.2;
+
+int[] initSoundEngineButton = new int[4];
+int[] initChildrenButton = new int[4];
+int[] reproductButton = new int[4];
+int[] initGPButton = new int[4];
+
+void setup(){
+    size(1000, 360); 
+    background(255);
+    colorMode(RGB, 256);
+    frameRate(10);
+    loadImages();
+    makeChromosomeArea();
+    for(int i=0; i<16; i++)
+	setChildrenChromosomeColor(i);
+}
+
+void draw(){
+    background(255);
+    drawFrame();
+    drawChromosomeFrame();
+    drawPhotos();
+    drawControlButton();
+    drawLabel();
+    drawMovingBox();
+}
+
+void drawFrame(){
+  fill(30, 50, 80);
+  rect(0, 0, 1000, 360);
+}
+
+void drawChromosomeFrame(){
+    fill(127, 127, 127);
+    for(int i=0; i<48; i++)
+	rect(chromosomeArea[i][0], chromosomeArea[i][1], 55, 55);
+    
+    colorMode(HSB, 255);
+    //Colored Chromosome if the frame has chromosome
+
+    for(int i=0; i<48; i++)
+	drawOneBox(chromosomeArea[i][0], chromosomeArea[i][1], i);
+    colorMode(RGB, 255);
+  
+    //tint(100,100,100,127);
+    image(keyBoard1, chromosomeArea[0][0]+3, chromosomeArea[0][1]+3, 55, 55);
+    image(keyBoard2, chromosomeArea[4][0]+3, chromosomeArea[4][1]+3, 55, 55);
+    image(keyBoard2, chromosomeArea[8][0]+3, chromosomeArea[8][1]+3, 55, 55);
+    image(e_bass, chromosomeArea[12][0]+3, chromosomeArea[12][1]+3, 55, 55);
+  
+    image(timpani, chromosomeArea[16][0]+3, chromosomeArea[16][1]+3, 55, 55);
+    image(snareDrum, chromosomeArea[20][0]+3, chromosomeArea[20][1]+3, 55, 55);
+    image(hihat, chromosomeArea[24][0]+3, chromosomeArea[24][1]+3, 55, 55);
+    image(cowbell, chromosomeArea[28][0]+3, chromosomeArea[28][1]+3, 55, 55);
+  
+  //noTint();
+}
+
+void drawMovingBox(){
+    if(draggingChromosome >= 0 && releaseTimeCounter == 0){
+	//通常のドラッグ中
+	fill(draggingChromosomeColor);
+	rect(mouseX - 30, mouseY -30, 55, 55);
+    }
+    else if(draggingChromosome >= 0  && releaseTimeCounter > 0){
+	//ドラッグを話して正しい位置にアイコンが移動中の時
+	releaseTimeCounter--;
+	if(releaseTimeCounter == 0){
+	    //Targetに到着したとき
+	    //終了処理．
+      chromosomeAreaColor[targetChromosomeAreaOfDrag] = 
+		draggingChromosomeColor;
+	    chromosomeAreaHasChromosome[targetChromosomeAreaOfDrag] = true;
+	    
+	    //Indexを解除
+	    targetChromosomeAreaOfDrag = -1;
+	    draggingChromosome = -1;
+	}
+	else{//移動中のとき
+	    fill(draggingChromosomeColor);
+	    rect(chromosomeArea[targetChromosomeAreaOfDrag][0] - 
+		 distanceFromReleasePointToTargetBox[releaseTimeCounter][0], 
+		 chromosomeArea[targetChromosomeAreaOfDrag][1] - 
+		 distanceFromReleasePointToTargetBox[releaseTimeCounter][1], 55, 55);
+	}
+    }
+}
+
+void loadImages(){
+    //Photos
+    for(int i=0; i<numberOfPhoto; i++){
+	photoImages[i] = loadImage("photo_ex" + i + ".jpg");
+	photoSizes[i][0] = photoImages[i].width;
+	photoSizes[i][1] = photoImages[i].height;
+    }
+        
+    //Control Buttons
+    //button_InitGPEngine = loadImage("icon/Button_InitGP.png");
+    button_InitPop = loadImage("icon/Button_InitPop.png");
+    //button_Reproduction = loadImage("icon/Button_Reproduction.png");
+    button_InitSounds = loadImage("icon/Button_InitSounds.png");
+    
+    //icons
+    timpani = loadImage("icon/timpani.gif");
+    snareDrum = loadImage("icon/snaredrum.gif");
+    cowbell = loadImage("icon/cowbell.gif");
+    keyBoard1 = loadImage("icon/e_piano.gif");
+    keyBoard2 = loadImage("icon/keyboard.gif");
+    e_bass = loadImage("icon/e_bass.png");
+    hihat = loadImage("icon/HiHat.png");
+
+    //labels
+    label_Harmony = loadImage("icon/Label_Harmony.png");
+    label_Percussion = loadImage("icon/Label_Percussion.png");
+    label_Melodies = loadImage("icon/Label_Melodies.png");
+    label_Bass = loadImage("icon/Label_Bass.png");
+    label_Parents = loadImage("icon/Label_Parents.png");
+    label_Offspring = loadImage("icon/Label_Offspring.png");
+    label_Collections = loadImage("icon/Label_Collections.png");
+    label_Arpeggio = loadImage("icon/Label_Arpeggio.png");
+}
+
+void makeChromosomeArea(){
+    int yOffset = 50;
+    int xOffset = 100;
+    int areaCounter = 0;
+    //Assign Field for Harmony, Bass, Melody, Arpeggio
+    for(int i=0; i<4; i++){
+	for(int j=0; j<4; j++){
+            chromosomeArea[areaCounter][0] = xOffset + j*55 + 10 * j;
+            chromosomeArea[areaCounter][1] = yOffset + i*55 + 10 * i;
+            chromosomeArea[areaCounter][2] = 
+		chromosomeArea[areaCounter][0] + 50;
+            chromosomeArea[areaCounter][3] = 
+		chromosomeArea[areaCounter][1] + 50;
+            chromosomeAreaColor[areaCounter] = color(100, 100, 100);
+            chromosomeAreaHasChromosome[areaCounter] = false;
+            areaCounter++;
+	}
+    }
+   
+    //Assing Field for Drum Kit 4Part
+    xOffset += 280;
+    for(int i=0; i<4; i++){
+	for(int j=0; j<4; j++){
+            chromosomeArea[areaCounter][0] = xOffset + j*55 + 10 * j;
+            chromosomeArea[areaCounter][1] = yOffset + i*55 + 10 * i;
+            chromosomeArea[areaCounter][2] = 
+		chromosomeArea[areaCounter][0] + 50;
+            chromosomeArea[areaCounter][3] = 
+		chromosomeArea[areaCounter][1] + 50;
+            chromosomeAreaColor[areaCounter] = color(100, 100, 100);
+            chromosomeAreaHasChromosome[areaCounter] = false;
+            areaCounter++;
+	} 
+    }
+  
+    //Collection Field 4*4
+    xOffset += 320;
+    for(int i=0; i<4; i++){
+	for(int j=0; j<4; j++){
+            chromosomeArea[areaCounter][0] = xOffset + j*55 + 10 * j;
+            chromosomeArea[areaCounter][1] = yOffset + i*55 + 10 * i;
+            chromosomeArea[areaCounter][2] = 
+		chromosomeArea[areaCounter][0] + 50;
+            chromosomeArea[areaCounter][3] = 
+		chromosomeArea[areaCounter][1] + 50;
+            chromosomeAreaColor[areaCounter] = color(100, 100, 100);
+            chromosomeAreaHasChromosome[areaCounter] = true;
+            areaCounter++;
+	}
+    }
+
+    /*-----------------
+  //Parents Field 2 x1
+  xOffset -= 280;
+  yOffset -= 90;
+  for(int i=0; i<2; i++){
+    	chromosomeArea[areaCounter][0] = xOffset + i * 55 + 10 * i;
+	chromosomeArea[areaCounter][1] = yOffset + 10;
+	chromosomeArea[areaCounter][2] = 
+	    chromosomeArea[areaCounter][0] + 50;
+	chromosomeArea[areaCounter][3] = 
+	    chromosomeArea[areaCounter][1] + 50;
+	chromosomeAreaColor[areaCounter] = color(100, 100, 100);
+	chromosomeAreaHasChromosome[areaCounter] = false;
+	areaCounter++;
+  }
+  
+  //Children Field 4 x1
+  xOffset += 280;
+  for(int i=0; i<4; i++){
+     chromosomeArea[areaCounter][0] = xOffset + i * 55 + 10 * i;
+     chromosomeArea[areaCounter][1] = yOffset + 10;
+     chromosomeArea[areaCounter][2] = 
+       chromosomeArea[areaCounter][0] + 50;
+      chromosomeArea[areaCounter][3] = 
+        chromosomeArea[areaCounter][1] + 50;
+      chromosomeAreaColor[areaCounter] = color(random(127), random(127), random(127));
+      chromosomeAreaHasChromosome[areaCounter] = true;
+    areaCounter++;
+  }
+  ------------------------------------*/
+}
+
+void drawOneBox(int xPos, int yPos, int boxIndex){
+    if(chromosomeAreaHasChromosome[boxIndex]){
+	int colorOffset = 0;
+	if(onMouseBox == boxIndex)
+	    colorOffset = 30;
+	fill(red(chromosomeAreaColor[boxIndex]) + colorOffset,
+	     green(chromosomeAreaColor[boxIndex]) + colorOffset,
+	     blue(chromosomeAreaColor[boxIndex]) + colorOffset);
+	rect(xPos, yPos, 55, 55);
+    }
+}
+
+void drawControlButton(){
+    int offsetX = 405;
+    int offsetY = 5;
+    
+    //Generate Initial Generation
+    fill(0, 100, 100);
+    rect(offsetX, offsetY, 80, 30);
+    image(button_InitPop, offsetX-10, offsetY, 100, 30);
+    initChildrenButton[0] = offsetX; initChildrenButton[1] = offsetY;
+    initChildrenButton[2] = initChildrenButton[0] + 80;
+    initChildrenButton[3] = initChildrenButton[1] + 30;
+ 
+    /*
+    //Initial GP Button
+    fill(100, 0, 0);
+    rect(offsetX+85, offsetY, 80, 30);
+    image(button_InitGPEngine, offsetX+85-10, offsetY, 100, 30);
+    initGPButton[0] = offsetX+85; initGPButton[1] = offsetY;
+    initGPButton[2] = initGPButton[0] + 80;
+    initGPButton[3] = initGPButton[1] + 30;
+    */
+
+    //Init SoundEngine
+    fill(0, 100, 0);
+    rect(offsetX+90, offsetY, 80, 30);
+    image(button_InitSounds, offsetX+90-10, offsetY, 100, 30);
+    initSoundEngineButton[0] = offsetX+90-10; 
+    initSoundEngineButton[1] = offsetY;
+    initSoundEngineButton[2] = initSoundEngineButton[0] + 80;
+    initSoundEngineButton[3] = initSoundEngineButton[1] + 30;
+
+    /*
+    //Reproduction
+    fill(100, 50, 50);
+    rect(140, 95, 120, 30);
+    image(button_Reproduction, 140+10, 95, 100, 30);
+    reproductButton[0] = 140; reproductButton[1] = 95;
+    reproductButton[2] = reproductButton[0] + 120;
+    reproductButton[3] = reproductButton[1] + 30;
+    */
+}
+
+void drawLabel(){
+   //tint(255,255,255,127);
+    image(label_Harmony, chromosomeArea[0][0]+19, chromosomeArea[0][1], 240, 60);
+    image(label_Melodies, chromosomeArea[4][0]+18, chromosomeArea[4][1], 240, 60);
+    image(label_Arpeggio, chromosomeArea[8][0]+18, chromosomeArea[8][1], 240, 60);
+    image(label_Bass, chromosomeArea[12][0]+18, chromosomeArea[12][1], 240, 60);
+    image(label_Percussion, chromosomeArea[16][0]+15, chromosomeArea[16][1], 240, 60);
+    image(label_Collections, chromosomeArea[32][0]+18, chromosomeArea[32][1]+10, 200, 40);
+    
+    /*
+    image(label_Parents, chromosomeArea[24][0]+20, chromosomeArea[24][1]+20, 100, 30);
+    image(label_Offspring, chromosomeArea[26][0]+80, chromosomeArea[26][1]+15, 100, 30);
+    */
+
+    //noTint();
+}
+
+void mouseReleased(){
+    if(draggingChromosome >= 0){
+	//マウスの先端がエリアの中に入っている時は，targetとして離しても移動し続ける
+	//そうでない場合は元の場所に戻る
+	if(detectMouseOnBox() >= 0){
+	    targetChromosomeAreaOfDrag = detectMouseOnBox();
+	    //draggingChromosomeをtargetChromosomeAreaOfDragに移動したという
+            //println("copyIndividual message sending is done." + draggingChromosome + " to " + targetChromosomeAreaOfDrag);
+	    copyToArea(draggingChromosome, targetChromosomeAreaOfDrag);
+        }
+	else
+	    targetChromosomeAreaOfDrag = draggingChromosome;
+	releaseTimeCounter = 15;
+	//離してから移動する座標を作ってておく．
+	int[] oneCount = new int[2] ;
+	oneCount[0] = 
+	    (chromosomeArea[targetChromosomeAreaOfDrag][0] - mouseX) / 15;
+	oneCount[1] = 
+	    (chromosomeArea[targetChromosomeAreaOfDrag][1] - mouseY) / 15;
+
+	for(int i=0; i<2; i++)
+	    distanceFromReleasePointToTargetBox[0][i] = oneCount[i];
+	for(int i=1; i<15; i++){
+	    for(int j=0; j<2; j++)
+	    distanceFromReleasePointToTargetBox[i][j] = 
+		oneCount[j] + distanceFromReleasePointToTargetBox[i-1][j];
+	}
+    }
+}
+
+void mousePressed(){
+    //Control Buttons
+    /*
+    if(mouseX >= initGPButton[0] && //Init All
+	    mouseX <= initGPButton[2] &&
+	    mouseY >= initGPButton[1] &&
+	    mouseY <= initGPButton[3]){
+	//print("initGPEngine();");
+	chromosomeAreaHasChromosome[24] = false;
+	chromosomeAreaHasChromosome[25] = false;
+	initGPEngine();
+	initSound();
+	for(int i=0; i<4; i++)
+	    setChildrenChromosomeColor(i);
+	for(int i=0; i<24; i++)
+	    chromosomeAreaHasChromosome[i] = false;
+    }
+    else if(mouseX >= initChildrenButton[0] && //Init Children Area
+	    mouseX <= initChildrenButton[2] &&
+	    mouseY >= initChildrenButton[1] &&
+	    mouseY <= initChildrenButton[3]){
+	//print("initChildren();");
+	initOffspring();
+	for(int i=0; i<4; i++)
+	    setChildrenChromosomeColor(i);
+    }
+    else if(mouseX >= reproductButton[0] && //Reproduction
+            mouseX <= reproductButton[2] &&
+            mouseY >= reproductButton[1] &&
+            mouseY <= reproductButton[3]){
+        //print("reproduction();");
+	reproduction();
+	for(int i=0; i<4; i++)
+	    setChildrenChromosomeColor(i);
+    }
+    */
+    if(mouseX >= initSoundEngineButton[0] && //Init Sound
+            mouseX <= initSoundEngineButton[2] &&
+            mouseY >= initSoundEngineButton[1] &&
+            mouseY <= initSoundEngineButton[3]){
+        //print("initSoundEngine();");
+	initSound();
+	for(int i=0; i<16; i++)
+	    setChildrenChromosomeColor(i);
+
+	for(int i=0; i<32; i++)
+	    chromosomeAreaHasChromosome[i] = false;
+	for(int i=32; i<48; i++)
+	    chromosomeAreaHasChromosome[i] = true;
+    }
+    else if(detectMouseOnBox() >= 0 && 
+	    chromosomeAreaHasChromosome[detectMouseOnBox()]){
+	//ChromosomeBoxのドラッグの開始
+
+	//Chromosome Dragging
+	draggingChromosome = detectMouseOnBox();
+	draggingChromosomeColor = chromosomeAreaColor[draggingChromosome];
+    }
+}
+
+int detectMouseOnBox(){
+    int returnValue = -1;
+    for(int i=0; i<48; i++){
+	if(mouseX >= chromosomeArea[i][0] &&
+	   mouseX <= chromosomeArea[i][2] &&
+	   mouseY >= chromosomeArea[i][1] &&
+	   mouseY <= chromosomeArea[i][3]){
+	    returnValue = i;
+	    break;
+	}
+    }
+    return returnValue;
+}
+
+void drawPhotos(){
+    imageMode(CORNER);
+    int yOffset = 40;
+    for(int i=0; i<4; i++){//y axis
+      int currentPhotoIndex = i;
+      //System.err.println(currentPhotoIndex);
+      float magnifyingPower = (float)100 /
+        (float)photoSizes[currentPhotoIndex][0]; 
+      //200 : max width of the photo in the GUI
+      //150 : max height of the photo in the GUI
+
+      image(photoImages[currentPhotoIndex], 
+        0, yOffset + i*65,  
+	(int)(photoImages[currentPhotoIndex].width * magnifyingPower), 
+	(int)(photoImages[currentPhotoIndex].height * magnifyingPower));
+    }
+}
+
+void setChildrenChromosomeColor(int indexInChildren){
+    //(int indexInChildren, int numOfNodes,
+    // int numOfTerminalNodes, int numOfFunctionNodes){
+    //System.err.println(indexInChildren + " " + numOfNodes + " " 
+    //+ numOfTerminalNodes + " " + numOfFunctionNodes);
+    int numOfNodes = offspringInformation[indexInChildren * 4 + 1];
+    int numOfTerminalNodes = offspringInformation[indexInChildren * 4 + 2];
+    int numOfFunctionNodes = offspringInformation[indexInChildren * 4 + 3];
+       
+    chromosomeAreaHasChromosome[indexInChildren+32] = true;
+    colorMode(HSB, 255);
+    color newColor = 
+	color((int)((float)numOfTerminalNodes / (float)numOfNodes * 255.), 
+	      (int)((float)numOfFunctionNodes / (float)numOfNodes * 255.));
+    chromosomeAreaColor[indexInChildren+32] = newColor;
+    colorMode(RGB, 255);
+
+}
+</script>
+    
+</head>
+<body>
+<form>
+    <input type="button" id="btn1" value="Play"><br />
+    <input type="button" id="btn2" value="Stop"><br />
+</form>
+<canvas id="processing_canvas" width="575" height="360"></canvas>
+</body>
+</html>
